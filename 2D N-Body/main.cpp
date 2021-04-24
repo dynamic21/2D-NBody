@@ -10,6 +10,7 @@ using std::min;
 using std::endl;
 using std::cout;
 using std::vector;
+using std::to_string;
 using std::unordered_map;
 
 using std::chrono::seconds;
@@ -17,7 +18,7 @@ using std::chrono::microseconds;
 using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 
-#define G 0.08
+#define G 1
 #define gravityRange 8
 #define controlFriction 0.1
 
@@ -26,14 +27,12 @@ class clusterBall
 public:
 	double x;
 	double xv;
-	int children;
 	int size;
 
 	clusterBall()
 	{
 		x = 0;
 		xv = 0;
-		children = 0;
 		size = 0;
 	}
 };
@@ -68,8 +67,8 @@ public:
 
 	vector<ball> balls;
 
-	unordered_map<int, vector<int>> collisionSpace;
-	unordered_map<int, clusterBall> gravitySpace[gravityRange];
+	unordered_map<uint32_t, vector<int>> collisionSpace;
+	unordered_map<uint32_t, clusterBall> gravitySpace[gravityRange];
 
 	unsigned int intRand()
 	{
@@ -107,7 +106,9 @@ public:
 	void ballPullBall(clusterBall* ball1, clusterBall* ball2)
 	{
 		double dpos = ball2->x - ball1->x;
-		dpos = (ball1->size + ball2->size) * G / (dpos * abs(dpos)));
+		double dis = abs(dpos);
+		dpos /= dis;
+		dpos *= ((long long)ball1->size * ball2->size) * G / (dis * dis);
 
 		ball1->xv += dpos;
 		ball2->xv -= dpos;
@@ -115,38 +116,52 @@ public:
 
 	void gravity()
 	{
-		unordered_map<int, clusterBall>::iterator find1;
+		unordered_map<uint32_t, clusterBall>::iterator find1;
 
 		for (int i = 0; i < gravityRange; i++)
 		{
-			for (unordered_map<int, clusterBall>::iterator j = gravitySpace[i].begin(); j != gravitySpace[i].end(); j++)
+			for (unordered_map<uint32_t, clusterBall>::iterator j = gravitySpace[i].begin(); j != gravitySpace[i].end(); j++)
 			{
 				find1 = gravitySpace[i].find(j->first + 2);
 
 				if (find1 != gravitySpace[i].end())
-					ballPullBall(&gravitySpace[i][j->first], &gravitySpace[i][j->first + 2]);
+					ballPullBall(&gravitySpace[i][j->first], &gravitySpace[i][uint32_t(j->first) + uint32_t(2)]);
 
 				if (!(j->first & 1))
 				{
 					find1 = gravitySpace[i].find(j->first + 3);
 
 					if (find1 != gravitySpace[i].end())
-						ballPullBall(&gravitySpace[i][j->first], &gravitySpace[i][j->first + 2]);
+						ballPullBall(&gravitySpace[i][j->first], &gravitySpace[i][uint32_t(j->first) + uint32_t(3)]);
 				}
+
+				if (i == 6)
+					cout << j->first << ", " << j->first + 2 << " and " << j->first + 3 << endl;
 			}
 		}
+
+		/*for (unordered_map<uint32_t, clusterBall>::iterator j = gravitySpace[0].begin(); j != gravitySpace[0].end(); j++)
+		{
+			find1 = gravitySpace[0].find(j->first + 1);
+
+			if (find1 != gravitySpace[0].end())
+				ballPullBall(&gravitySpace[0][j->first], &gravitySpace[0][j->first + 1]);
+		}*/
 	}
 
 	void ballHitBall(ball* ball1, ball* ball2)
 	{
 		double dpos = ball2->x - ball1->x;
+		double dis = abs(dpos);
 
-		if (abs(dpos) < 1)
+		if (dis < 1)
 		{
-			dpos = (ball2->xv - ball1->xv);
+			dpos /= dis;
+			dis = dpos * (ball2->xv - ball1->xv);
 
-			if (dpos < 0)
+			if (dis < 0)
 			{
+				dpos *= dis;
 				ball1->xv += dpos;
 				ball2->xv -= dpos;
 			}
@@ -155,16 +170,16 @@ public:
 
 	void collision()
 	{
-		unordered_map<int, vector<int>>::iterator find1;
+		unordered_map<uint32_t, vector<int>>::iterator find1;
 
-		for (unordered_map<int, vector<int>>::iterator i = collisionSpace.begin(); i != collisionSpace.end(); i++)
+		for (unordered_map<uint32_t, vector<int>>::iterator i = collisionSpace.begin(); i != collisionSpace.end(); i++)
 		{
 			for (int j = 0; j < i->second.size(); j++)
 			{
 				for (int k = j + 1; k < i->second.size(); k++)
 					ballHitBall(&balls[i->second[j]], &balls[i->second[k]]);
 
-				find1 = collisionSpace.find(i->first + 1);
+				find1 = collisionSpace.find(uint32_t(i->first) + uint32_t(1));
 
 				if (find1 != collisionSpace.end()) {
 					for (int k = 0; k < find1->second.size(); k++)
@@ -181,9 +196,20 @@ public:
 
 		for (int i = gravityRange - 1; i > 0; i--)
 		{
-			for (unordered_map<int, clusterBall>::iterator j = gravitySpace[i].begin(); j != gravitySpace[i].end(); j++)
+			for (unordered_map<uint32_t, clusterBall>::iterator j = gravitySpace[i].begin(); j != gravitySpace[i].end(); j++)
 			{
-				int bPos = j->first << 1;
+				double mx = (j->second.x - x) * zoom + halfScreen;
+				double my = 450 - i * 3 * zoom;
+				FillCircle(mx, my, zoom * sqrt(j->second.size) * 0.5);
+				DrawLine(mx, my, mx + j->second.xv * 1000, my, Pixel(100, 100, 100));
+			}
+		}
+
+		for (int i = gravityRange - 1; i > 0; i--)
+		{
+			for (unordered_map<uint32_t, clusterBall>::iterator j = gravitySpace[i].begin(); j != gravitySpace[i].end(); j++)
+			{
+				uint32_t bPos = j->first << 1;
 
 				if (gravitySpace[i - 1].find(bPos) != gravitySpace[i - 1].end())
 					gravitySpace[i - 1][bPos].xv += j->second.xv;
@@ -207,26 +233,27 @@ public:
 
 		for (int i = 0; i < balls.size(); i++)
 		{
-			int floorBPos = int(balls[i].x) - (balls[i].x < 0);
+			uint32_t floorBPos = int(balls[i].x);
 			collisionSpace[floorBPos].push_back(i);
 			gravitySpace[0][floorBPos].x += balls[i].x;
 			gravitySpace[0][floorBPos].size++;
-			gravitySpace[0][floorBPos].children++;
 
-			FillCircle((balls[i].x - x) * zoom + halfScreen, 250, zoom * 0.5, balls[i].color);
+			FillCircle((balls[i].x - x) * zoom + halfScreen, 450, zoom * 0.5, balls[i].color);
 		}
 
 		for (int i = 0; i < gravityRange - 1; i++)
 		{
-			for (unordered_map<int, clusterBall>::iterator j = gravitySpace[i].begin(); j != gravitySpace[i].end(); j++)
+			for (unordered_map<uint32_t, clusterBall>::iterator j = gravitySpace[i].begin(); j != gravitySpace[i].end(); j++)
 			{
-				j->second.x /= j->second.children;
-				int floorBPos = j->first - (j->first < 0) >> 1;
-				gravitySpace[i + 1][floorBPos].x += j->second.x;
+				j->second.x /= j->second.size;
+				uint32_t floorBPos = j->first >> 1;
+				gravitySpace[i + 1][floorBPos].x += j->second.x * j->second.size;
 				gravitySpace[i + 1][floorBPos].size += j->second.size;
-				gravitySpace[i + 1][floorBPos].children++;
 			}
 		}
+
+		for (unordered_map<uint32_t, clusterBall>::iterator i = gravitySpace[gravityRange - 1].begin(); i != gravitySpace[gravityRange - 1].end(); i++)
+			i->second.x /= i->second.size;
 	}
 
 	bool OnUserCreate() override
@@ -241,11 +268,11 @@ public:
 		for (int i = 0; i < 100; i++)
 		{
 			double bPos = doubleRand() * 200 - 100;
-			double bPosv = doubleRand() * 0;
+			double bPosv = doubleRand() * 0;// 6 - 3;
 			Pixel bColor = mapToRainbow(doubleRand() * 6);
 			balls.push_back(ball(bPos, bPosv, bColor));
 		}
-		//balls.push_back(ball(0, 1, mapToRainbow(doubleRand() * 6)));
+		////balls.push_back(ball(0, 1, mapToRainbow(doubleRand() * 6)));
 
 		return true;
 	}
@@ -264,6 +291,37 @@ public:
 
 int main()
 {
+	/*double nu = -1;
+	int num = 0xffffffff;
+
+	for (int i = 0; i < 32; i++)
+		cout << (num >> (31 - i) & 1);
+
+	cout << endl << num << endl;
+
+	num = num + 2;
+
+	for (int i = 0; i < 32; i++)
+		cout << (num >> (31 - i) & 1);
+
+	cout << endl << num << endl;
+
+	num -= 5;
+
+	for (int i = 0; i < 32; i++)
+		cout << (num >> (31 - i) & 1);
+
+	cout << endl << num << endl;
+
+	num /= 2;
+
+	for (int i = 0; i < 32; i++)
+		cout << (num >> (31 - i) & 1);
+
+	cout << endl << num << endl;
+
+	return 0;*/
+
 	Example demo;
 
 	if (demo.Construct(1000, 500, 1, 1))
